@@ -8,7 +8,7 @@ import {
 	NODE_INTERACTION_UNKNOWN_ACCESS,
 	NODE_INTERACTION_UNKNOWN_ASSIGNMENT
 } from '../../NodeInteractions';
-import { isObjectExpressionNode, isPropertyNode } from '../../utils/identifyNode';
+import { isIdentifierNode, isObjectExpressionNode, isPropertyNode } from '../../utils/identifyNode';
 import type { ObjectPath, WellKnownSymbol } from '../../utils/PathTracker';
 import {
 	EMPTY_PATH,
@@ -23,6 +23,9 @@ import {
 	UnknownWellKnown
 } from '../../utils/PathTracker';
 import ArrayExpression from '../ArrayExpression';
+import type Literal from '../Literal';
+import type Property from '../Property';
+import type SpreadElement from '../SpreadElement';
 import type { LiteralValueOrUnknown } from './Expression';
 import { ExpressionEntity, UnknownValue } from './Expression';
 
@@ -131,6 +134,13 @@ const GETTER_ACCESS: ValueDescription = {
 		);
 	}
 };
+
+const isSetTrap = (property: Property | SpreadElement): boolean =>
+	isPropertyNode(property) &&
+	!property.computed &&
+	(isIdentifierNode(property.key)
+		? property.key.name === 'set'
+		: (property.key as Literal).value === 'set');
 
 // We use shortened variables to reduce file size here
 /* OBJECT */
@@ -447,6 +457,12 @@ const knownGlobals: GlobalDescription = {
 								SHARED_RECURSION_TRACKER
 							);
 						}
+						// Without a "set" trap, assignments to the proxy are forwarded to
+						// the target. Otherwise, values of the target can still be read via
+						// the proxy and then be mutated.
+						target.deoptimizePath(
+							parameter.properties.some(isSetTrap) ? UNKNOWN_VALUES_PATH : UNKNOWN_PATH
+						);
 						return;
 					}
 				}
